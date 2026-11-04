@@ -25,7 +25,7 @@ on:
         description: release-kit ref used to fetch bump-version.mjs
         type: string
         required: false
-        default: v0.1.0
+        default: v0.2.0
     outputs:
       version:
         description: New semver without v

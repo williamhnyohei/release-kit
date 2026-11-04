@@ -42,6 +42,11 @@ export async function runDoctor(args) {
       bad("missing secret AUTO_MERGE_TOKEN — merges by github-actions[bot] skip push workflows");
       failures += 1;
     }
+    if (secrets.includes("RELEASE_KIT_AI_KEY")) {
+      ok("secret RELEASE_KIT_AI_KEY is set (AI label upgrade)");
+    } else {
+      warn("RELEASE_KIT_AI_KEY unset — label-pr uses heuristics only (agents via AGENTS.md still preferred)");
+    }
   } catch (err) {
     bad(`cannot list secrets: ${err.message}`);
     failures += 1;
@@ -83,7 +88,7 @@ export async function runDoctor(args) {
   }
 
   // local workflow files
-  const needed = ["automerge.yml", "version-and-tag.yml"];
+  const needed = ["automerge.yml", "version-and-tag.yml", "label-pr.yml"];
   console.log("\nLocal workflows:");
   for (const name of needed) {
     const p = path.join(cwd, ".github", "workflows", name);
@@ -94,11 +99,16 @@ export async function runDoctor(args) {
     }
   }
 
-  // docs
+  // docs / agents
   if (fs.existsSync(path.join(cwd, "docs", "RELEASING.md"))) {
     ok("docs/RELEASING.md");
   } else {
     warn("docs/RELEASING.md missing");
+  }
+  if (fs.existsSync(path.join(cwd, "AGENTS.md"))) {
+    ok("AGENTS.md (AI agent instructions)");
+  } else {
+    warn("AGENTS.md missing — agents will not know the label contract");
   }
 
   console.log("");

@@ -55,7 +55,12 @@ export async function runInit(args) {
   console.log(`\nrelease-kit init → ${repo} (branch ${branch})\n`);
 
   const workflowDir = path.join(cwd, ".github", "workflows");
-  for (const name of ["automerge.yml", "version-and-tag.yml", "ci.yml"]) {
+  for (const name of [
+    "automerge.yml",
+    "version-and-tag.yml",
+    "ci.yml",
+    "label-pr.yml",
+  ]) {
     const src = path.join(templates, "workflows", name);
     const raw = fs.readFileSync(src, "utf8");
     writeFile(path.join(workflowDir, name), render(raw, vars), args.dryRun);
@@ -64,6 +69,12 @@ export async function runInit(args) {
   writeFile(
     path.join(cwd, "docs", "RELEASING.md"),
     render(fs.readFileSync(path.join(templates, "docs", "RELEASING.md"), "utf8"), vars),
+    args.dryRun,
+  );
+
+  writeFile(
+    path.join(cwd, "AGENTS.md"),
+    fs.readFileSync(path.join(templates, "AGENTS.md"), "utf8"),
     args.dryRun,
   );
 
@@ -124,19 +135,24 @@ export async function runInit(args) {
   console.log(`
 Next (required once):
 
-  1. Create a classic PAT with scope "repo" (or use your gh login token)
-  2. Store it as AUTO_MERGE_TOKEN so merges are attributed to YOU
-     (GITHUB_TOKEN merges do NOT trigger Version and tag on ${branch}):
+  1. Store AUTO_MERGE_TOKEN (user PAT / gh auth) — required for releases to fire:
 
        gh auth token | gh secret set AUTO_MERGE_TOKEN --repo ${repo}
 
-  3. Protect ${branch}: require the CI check before merge
-  4. Commit the generated files and merge a small PR with label release:skip
-  5. Run: npx @williamhnyohei/release-kit doctor --repo ${repo}
+  2. Optional AI label upgrade (OpenAI-compatible key):
 
-Pitfalls this kit already encodes:
-  - Never enable auto-merge with GITHUB_TOKEN alone
-  - Stacked PRs are promoted after the base merges
-  - Version source of truth = latest git tag v*, not a stale package.json
+       gh secret set RELEASE_KIT_AI_KEY --repo ${repo}
+
+     Without it, label-pr still applies a heuristic label from the PR diff.
+     Coding agents should follow AGENTS.md / .cursor rules and set release:* themselves.
+
+  3. Protect ${branch}: require the CI check before merge
+  4. Commit generated files; open a probe PR
+  5. Run: npx github:williamhnyohei/release-kit#${args.kitRef} doctor --repo ${repo}
+
+Built for AI + Actions together:
+  - Agent judges the diff and sets release:* (preferred)
+  - label-pr fills a missing label from title/body/files (+ optional LLM)
+  - automerge + version-and-tag handle the rest
 `);
 }

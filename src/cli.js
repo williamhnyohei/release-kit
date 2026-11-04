@@ -2,21 +2,21 @@ import { runDoctor } from "./doctor.js";
 import { runInit } from "./init.js";
 
 function help() {
-  console.log(`release-kit — label-driven semver + automerge + tag
+  console.log(`release-kit — AI-friendly semver labels + automerge + tag
 
 Usage:
-  npx @williamhnyohei/release-kit init [options]
-  npx @williamhnyohei/release-kit doctor [options]
+  npx github:williamhnyohei/release-kit#v0.2.0 init [options]
+  npx github:williamhnyohei/release-kit#v0.2.0 doctor [options]
 
 Commands:
-  init     Copy workflows/docs, create labels, enable auto-merge
+  init     Copy workflows/docs/AGENTS.md, create labels, enable auto-merge
   doctor   Check secrets, labels, workflows, and common pitfalls
 
 Options:
   --repo owner/name     GitHub repo (default: gh repo view)
   --assignee login      PR assignee for automerge (default: repo owner)
   --branch name         Default branch (default: main)
-  --kit-ref ref         release-kit ref for reusable workflows (default: v0.1.0)
+  --kit-ref ref         release-kit ref for reusable workflows (default: v0.2.0)
   --no-cursor           Skip .cursor/rules
   --dry-run             Print actions without writing
   -h, --help            Show help
@@ -29,7 +29,7 @@ function parseArgs(argv) {
     repo: null,
     assignee: null,
     branch: "main",
-    kitRef: "v0.1.0",
+    kitRef: "v0.2.0",
     cursor: true,
     dryRun: false,
   };
@@ -45,7 +45,7 @@ function parseArgs(argv) {
     else if (a === "--repo") out.repo = rest.shift();
     else if (a === "--assignee") out.assignee = rest.shift();
     else if (a === "--branch") out.branch = rest.shift() || "main";
-    else if (a === "--kit-ref") out.kitRef = rest.shift() || "v0.1.0";
+    else if (a === "--kit-ref") out.kitRef = rest.shift() || "v0.2.0";
     else throw new Error(`Unknown argument: ${a}`);
   }
   return out;

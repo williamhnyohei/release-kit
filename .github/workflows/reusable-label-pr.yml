@@ -1,0 +1,89 @@
+name: Reusable Label PR
+
+# If the PR has no release:* label yet, suggest one from title/body/files
+# (heuristic + optional OpenAI-compatible AI) and apply it.
+# Designed to work alongside coding agents that follow AGENTS.md / Cursor rules.
+
+on:
+  workflow_call:
+    inputs:
+      kit_ref:
+        type: string
+        required: false
+        default: v0.2.0
+      force:
+        description: Replace an existing release:* label
+        type: boolean
+        required: false
+        default: false
+    secrets:
+      RELEASE_KIT_AI_KEY:
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    name: Suggest release label
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout release-kit scripts
+        uses: actions/checkout@v4
+        with:
+          repository: williamhnyohei/release-kit
+          ref: ${{ inputs.kit_ref }}
+          path: .release-kit
+          sparse-checkout: |
+            scripts
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Decide and apply label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          FORCE: ${{ inputs.force }}
+          RELEASE_KIT_AI_KEY: ${{ secrets.RELEASE_KIT_AI_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXISTING=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json labels \
+            --jq '[.labels[].name | select(startswith("release:"))] | join(",")')
+          if [[ -n "$EXISTING" && "$FORCE" != "true" ]]; then
+            echo "Already labeled: $EXISTING — leaving as-is (agent/human wins)."
+            exit 0
+          fi
+
+          BODY_FILE=$(mktemp)
+          FILES_FILE=$(mktemp)
+          gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$BODY_FILE"
+          gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only > "$FILES_FILE" || true
+
+          LABEL=$(node .release-kit/scripts/suggest-release-label.mjs \
+            --title "$TITLE" \
+            --body "$(cat "$BODY_FILE")" \
+            --files "$FILES_FILE")
+          echo "Suggested: $LABEL"
+
+          if [[ -n "$EXISTING" ]]; then
+            IFS=',' read -ra OLD <<< "$EXISTING"
+            for L in "${OLD[@]}"; do
+              [[ -n "$L" ]] && gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label "$L" || true
+            done
+          fi
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label "$LABEL"
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" \
+            --body "release-kit applied \`${LABEL}\` from the PR diff (heuristic${RELEASE_KIT_AI_KEY:+ + AI}). Override anytime by setting another \`release:*\` label." || true

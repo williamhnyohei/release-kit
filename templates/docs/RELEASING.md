@@ -1,29 +1,35 @@
 # Releasing
 
+Built for **coding agents + GitHub Actions** together.
+
 Every PR merged into `{{DEFAULT_BRANCH}}` can create the next semver tag automatically.
 
 ## Flow
 
-1. Open a PR (prefer base `{{DEFAULT_BRANCH}}`). Stacked PRs are OK — after the base merges, children are retargeted and auto-merged.
-2. Add **exactly one** label:
+1. Open a PR (agent or human). Prefer base `{{DEFAULT_BRANCH}}`.
+2. Set **exactly one** `release:*` label from the **diff**:
    - `release:major` → `X.0.0`
    - `release:minor` → `x.Y.0`
-   - `release:patch` → `x.y.Z` (default if unlabeled)
+   - `release:patch` → `x.y.Z`
    - `release:skip` → no tag
-3. CI must pass. Automerge squash-merges when green.
-4. **Version and tag** bumps from the latest git tag `v*` and pushes `vX.Y.Z`.
-5. Optional: set `release_workflow` in `.github/workflows/version-and-tag.yml` to pack/publish.
+3. If no label is set, the **label-pr** workflow suggests one from title/body/files (heuristic, optional AI via `RELEASE_KIT_AI_KEY`). An explicit label always wins.
+4. CI passes → automerge (via `AUTO_MERGE_TOKEN`).
+5. **Version and tag** creates `vX.Y.Z`. Optional pack workflow via `release_workflow`.
 
-## Required secret
+## Secrets
 
 ```bash
 gh auth token | gh secret set AUTO_MERGE_TOKEN --repo {{REPO}}
+# optional:
+gh secret set RELEASE_KIT_AI_KEY --repo {{REPO}}
 ```
 
-Merges done by `github-actions[bot]` via `GITHUB_TOKEN` **do not** trigger push workflows — so Version and tag would never run.
+## AI agents
+
+See `AGENTS.md` and `.cursor/rules/release-semver.mdc`. Agents should apply the label themselves when opening the PR.
 
 ## Doctor
 
 ```bash
-npx @williamhnyohei/release-kit doctor
+npx github:williamhnyohei/release-kit#{{KIT_REF}} doctor
 ```

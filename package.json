@@ -1,7 +1,7 @@
 {
   "name": "@williamhnyohei/release-kit",
-  "version": "0.1.0",
-  "description": "Semver-by-PR-label, auto-merge, tag, and release bootstrap for GitHub repos",
+  "version": "0.2.0",
+  "description": "AI-friendly GitHub release kit: agents set semver labels, Actions auto-merge/tag/release",
   "type": "module",
   "bin": {
     "release-kit": "./bin/release-kit.js"
@@ -15,7 +15,7 @@
   ],
   "scripts": {
     "start": "node bin/release-kit.js",
-    "test": "node --test src/*.test.js"
+    "test": "node --test src/*.test.js scripts/*.test.js"
   },
   "engines": {
     "node": ">=20"

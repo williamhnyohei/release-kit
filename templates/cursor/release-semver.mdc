@@ -1,15 +1,18 @@
 ---
-description: Semver labels on every PR — Actions releases automatically on merge.
+description: Semver labels on every PR — release-kit + Actions. Designed for AI agents.
 alwaysApply: true
 ---
 
-# Automatic releases
+# Automatic releases (release-kit)
 
-Do **not** ask the user to bump `package.json` or run a manual release. Merging to the default branch tags (and optionally releases) automatically.
+This repo is wired for **AI-assisted release engineering**. You (the agent) own the semver decision; Actions own merge/tag/release.
 
-Prefer independent PRs against the default branch. Stacked PRs are allowed — after the base merges, Actions retargets children and auto-merges them.
+Do **not** ask the user to bump `package.json` or run a manual release.
 
-When opening a PR, set **exactly one** label:
+## On every PR you open
+
+1. Judge the **diff you implemented** (not the ticket title alone).
+2. Set **exactly one** label via `gh pr create` / `gh pr edit`:
 
 | Label | Use when | Bump |
 |-------|----------|------|
@@ -24,4 +27,6 @@ Default if unsure: **`release:patch`**.
 gh pr create ... --label "release:minor"
 ```
 
-Do not commit version bumps unless the user explicitly asks.
+3. Prefer PRs against the default branch. Stacked PRs are OK — Actions retargets children after the base merges.
+
+A `label-pr` workflow may auto-apply a label when none exists. **Your explicit label always wins.**

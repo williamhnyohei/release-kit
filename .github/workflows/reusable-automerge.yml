@@ -1,0 +1,145 @@
+name: Reusable Automerge
+
+# Caller must trigger on pull_request (opened/synchronize/closed/...).
+# Requires secret AUTO_MERGE_TOKEN (user PAT) — GITHUB_TOKEN merges skip push workflows.
+
+on:
+  workflow_call:
+    inputs:
+      assignee:
+        description: GitHub login to assign on every PR
+        type: string
+        required: true
+      default_branch:
+        description: Trunk branch name
+        type: string
+        required: false
+        default: main
+      promote_stacked:
+        description: Retarget/auto-merge stacked children after base merges
+        type: boolean
+        required: false
+        default: true
+    secrets:
+      AUTO_MERGE_TOKEN:
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    name: Enable auto-merge
+    if: >
+      github.event.action != 'closed' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.base.ref == inputs.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign owner and enable squash auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          ASSIGNEE: ${{ inputs.assignee }}
+        run: |
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-assignee "$ASSIGNEE" || true
+          gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --auto --squash
+
+  acknowledge-stacked:
+    name: Acknowledge stacked PR
+    if: >
+      github.event.action != 'closed' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.base.ref != inputs.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Note that merge waits for base
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+        run: |
+          body="Stacked on \`${BASE}\`. When that base merges into \`${DEFAULT_BRANCH}\`, this PR will be retargeted and auto-merged."
+          if gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --jq '.[].body' \
+            | grep -Fq "will be retargeted and auto-merged"; then
+            echo "Note already present."
+            exit 0
+          fi
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$body"
+
+  promote-stacked:
+    name: Promote stacked PRs after base merges
+    if: >
+      inputs.promote_stacked &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == inputs.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (for ancestry checks)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Promote stacked children
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
+          MERGED_HEAD: ${{ github.event.pull_request.head.ref }}
+          MERGED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGED_PR: ${{ github.event.pull_request.number }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          ASSIGNEE: ${{ inputs.assignee }}
+        run: |
+          set -euo pipefail
+          declare -A SEEN=()
+          CHILDREN=()
+
+          add_child() {
+            local n="$1"
+            [[ -z "$n" || "$n" == "$MERGED_PR" ]] && return
+            [[ -n "${SEEN[$n]:-}" ]] && return
+            SEEN[$n]=1
+            CHILDREN+=("$n")
+          }
+
+          echo "Looking for open PRs with base=${MERGED_HEAD}"
+          while IFS= read -r n; do add_child "$n"; done < <(
+            gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$MERGED_HEAD" \
+              --json number,isDraft --jq '.[] | select(.isDraft==false) | .number'
+          )
+
+          echo "Scanning open PRs into ${DEFAULT_BRANCH} for stack ancestry"
+          git fetch origin --prune
+          while IFS=$'\t' read -r n head draft has_auto; do
+            [[ "$draft" == "true" ]] && continue
+            [[ "$has_auto" == "true" ]] && continue
+            git fetch origin "$head" --depth=200 2>/dev/null || git fetch origin "$head" || continue
+            if git merge-base --is-ancestor "$MERGED_HEAD_SHA" "origin/$head" 2>/dev/null; then
+              echo "  #$n ($head) is stacked on merged tip"
+              add_child "$n"
+            fi
+          done < <(
+            gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$DEFAULT_BRANCH" \
+              --json number,headRefName,isDraft,autoMergeRequest \
+              --jq '.[] | [.number, .headRefName, (.isDraft|tostring), (if .autoMergeRequest then "true" else "false" end)] | @tsv'
+          )
+
+          if [[ ${#CHILDREN[@]} -eq 0 ]]; then
+            echo "No stacked children."
+            exit 0
+          fi
+
+          for PR in "${CHILDREN[@]}"; do
+            BASE_NOW=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json baseRefName --jq .baseRefName)
+            echo "Promoting #$PR (base=${BASE_NOW}) → ${DEFAULT_BRANCH} + auto-merge"
+            if [[ "$BASE_NOW" != "$DEFAULT_BRANCH" ]]; then
+              gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --base "$DEFAULT_BRANCH"
+            fi
+            gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-assignee "$ASSIGNEE" || true
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" \
+              --body "Base \`${MERGED_HEAD}\` merged into \`${DEFAULT_BRANCH}\`. Auto-retarget + auto-merge enabled." || true
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$PR/update-branch" || true
+            gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --auto --squash
+          done

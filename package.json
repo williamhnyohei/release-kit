@@ -1,0 +1,35 @@
+{
+  "name": "@williamhnyohei/release-kit",
+  "version": "0.1.0",
+  "description": "Semver-by-PR-label, auto-merge, tag, and release bootstrap for GitHub repos",
+  "type": "module",
+  "bin": {
+    "release-kit": "./bin/release-kit.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "scripts",
+    "templates",
+    ".github/workflows"
+  ],
+  "scripts": {
+    "start": "node bin/release-kit.js",
+    "test": "node --test src/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "github-actions",
+    "semver",
+    "release",
+    "automerge",
+    "ci"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/williamhnyohei/release-kit.git"
+  }
+}

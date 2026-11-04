@@ -1,0 +1,20 @@
+name: Version and tag
+
+on:
+  push:
+    branches: [{{DEFAULT_BRANCH}}]
+
+permissions:
+  contents: write
+  pull-requests: read
+  actions: write
+
+jobs:
+  version-and-tag:
+    uses: {{KIT_REPO}}/.github/workflows/reusable-version-and-tag.yml@{{KIT_REF}}
+    with:
+      default_branch: {{DEFAULT_BRANCH}}
+      # Set to your pack/publish workflow filename to run after tagging, e.g. release.yml
+      release_workflow: ""
+      tag_prefix_message: Release
+      kit_ref: {{KIT_REF}}

@@ -1,0 +1,151 @@
+name: Reusable Version and tag
+
+# Caller should trigger on push to the default branch.
+# Creates the next vX.Y.Z from PR labels (release:major|minor|patch|skip).
+# Optionally dispatches another workflow with input "tag".
+
+on:
+  workflow_call:
+    inputs:
+      default_branch:
+        type: string
+        required: false
+        default: main
+      release_workflow:
+        description: Workflow file to dispatch after tagging (e.g. release.yml). Empty = tag only.
+        type: string
+        required: false
+        default: ""
+      tag_prefix_message:
+        description: Annotated tag message prefix
+        type: string
+        required: false
+        default: Release
+      kit_ref:
+        description: release-kit ref used to fetch bump-version.mjs
+        type: string
+        required: false
+        default: v0.1.0
+    outputs:
+      version:
+        description: New semver without v
+        value: ${{ jobs.version-and-tag.outputs.version }}
+      tag:
+        description: New tag including v
+        value: ${{ jobs.version-and-tag.outputs.tag }}
+      skipped:
+        description: Whether tagging was skipped
+        value: ${{ jobs.version-and-tag.outputs.skipped }}
+
+permissions:
+  contents: write
+  pull-requests: read
+  actions: write
+
+jobs:
+  version-and-tag:
+    name: Tag next version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag: ${{ steps.ver.outputs.tag }}
+      skipped: ${{ steps.ver.outputs.skipped }}
+    steps:
+      - name: Checkout consumer
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout release-kit scripts
+        uses: actions/checkout@v4
+        with:
+          repository: williamhnyohei/release-kit
+          ref: ${{ inputs.kit_ref }}
+          path: .release-kit
+          sparse-checkout: |
+            scripts
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Compute next version and create tag
+        id: ver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.sha }}
+          TAG_PREFIX: ${{ inputs.tag_prefix_message }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          MSG="${{ github.event.head_commit.message }}"
+          if [[ "$MSG" == "chore: release"* ]]; then
+            echo "Skipping version job for release sync commit."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git fetch --tags origin
+
+          LATEST_TAG=$(git tag -l 'v*.*.*' --sort=-v:refname | head -n1 || true)
+          if [[ -n "$LATEST_TAG" ]]; then
+            BASE="${LATEST_TAG#v}"
+          elif [[ -f package.json ]]; then
+            BASE=$(node -p "require('./package.json').version")
+          else
+            BASE="0.0.0"
+          fi
+          echo "Base version: $BASE (tag=${LATEST_TAG:-none})"
+
+          LEVEL="patch"
+          PR_JSON=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/pulls" --jq '.[0] // empty' || true)
+          if [[ -n "${PR_JSON}" && "${PR_JSON}" != "null" ]]; then
+            LABELS=$(echo "$PR_JSON" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);process.stdout.write((j.labels||[]).map(x=>x.name).join(','))}catch{}})")
+            echo "PR labels: ${LABELS:-none}"
+            case ",$LABELS," in
+              *,release:major,*) LEVEL="major" ;;
+              *,release:minor,*) LEVEL="minor" ;;
+              *,release:patch,*) LEVEL="patch" ;;
+            esac
+            if [[ ",$LABELS," == *",release:skip,"* ]]; then
+              echo "release:skip — not tagging."
+              echo "skipped=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            echo "No associated PR — defaulting to patch."
+          fi
+
+          VERSION=$(node .release-kit/scripts/bump-version.mjs "$LEVEL" "$BASE")
+          TAG="v${VERSION}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "level=$LEVEL" >> "$GITHUB_OUTPUT"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists — skipping create."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "${TAG_PREFIX} $VERSION ($LEVEL)"
+          git push origin "$TAG"
+          echo "Created $TAG"
+
+      - name: Dispatch release workflow
+        if: >
+          steps.ver.outputs.skipped != 'true' &&
+          steps.ver.outputs.tag != '' &&
+          inputs.release_workflow != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          WORKFLOW: ${{ inputs.release_workflow }}
+        shell: bash
+        run: |
+          gh workflow run "$WORKFLOW" --repo "$GITHUB_REPOSITORY" -f tag="$TAG"
+          echo "Triggered $WORKFLOW for $TAG"

@@ -1,0 +1,27 @@
+---
+description: Semver labels on every PR — Actions releases automatically on merge.
+alwaysApply: true
+---
+
+# Automatic releases
+
+Do **not** ask the user to bump `package.json` or run a manual release. Merging to the default branch tags (and optionally releases) automatically.
+
+Prefer independent PRs against the default branch. Stacked PRs are allowed — after the base merges, Actions retargets children and auto-merges them.
+
+When opening a PR, set **exactly one** label:
+
+| Label | Use when | Bump |
+|-------|----------|------|
+| `release:major` | Breaking / incompatible behavior | `X.0.0` |
+| `release:minor` | New user-facing capability | `x.Y.0` |
+| `release:patch` | Fix, chore, docs, CI, refactor | `x.y.Z` |
+| `release:skip` | No tag/release | — |
+
+Default if unsure: **`release:patch`**.
+
+```bash
+gh pr create ... --label "release:minor"
+```
+
+Do not commit version bumps unless the user explicitly asks.

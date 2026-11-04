@@ -1,0 +1,19 @@
+name: Automerge
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize, closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    uses: {{KIT_REPO}}/.github/workflows/reusable-automerge.yml@{{KIT_REF}}
+    secrets:
+      AUTO_MERGE_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
+    with:
+      assignee: {{ASSIGNEE}}
+      default_branch: {{DEFAULT_BRANCH}}
+      promote_stacked: true

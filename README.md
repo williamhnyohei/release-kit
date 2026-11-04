@@ -12,7 +12,7 @@ Born from shipping real apps where auto-merge, stacked PRs, and “why didn’t 
 |-------|------|
 | **AGENTS.md + Cursor rule** | Instructs the AI to judge the diff and set `release:*` |
 | **label-pr** | If no label yet: heuristic from title/body/files; optional LLM via `RELEASE_KIT_AI_KEY` |
-| **automerge** | Squash auto-merge with **user** PAT + stacked PR promote |
+| **automerge** | Squash auto-merge with **user** PAT + stacked PR promote + refresh open PRs after trunk moves |
 | **version-and-tag** | Latest `v*` + label → new tag (+ optional release workflow) |
 | **init / doctor** | Bootstrap + health check |
 

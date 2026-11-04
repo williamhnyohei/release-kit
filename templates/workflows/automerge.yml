@@ -17,3 +17,4 @@ jobs:
       assignee: {{ASSIGNEE}}
       default_branch: {{DEFAULT_BRANCH}}
       promote_stacked: true
+      refresh_open_prs: true

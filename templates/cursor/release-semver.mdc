@@ -27,6 +27,6 @@ Default if unsure: **`release:patch`**.
 gh pr create ... --label "release:minor"
 ```
 
-3. Prefer PRs against the default branch. Stacked PRs are OK — Actions retargets children after the base merges.
+3. Prefer PRs against the default branch. After one merges, Actions updates other open PRs onto trunk (strict up-to-date). Stacked PRs are OK — Actions retargets children after the base merges.
 
 A `label-pr` workflow may auto-apply a label when none exists. **Your explicit label always wins.**

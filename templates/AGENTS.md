@@ -17,4 +17,4 @@ If Actions also runs `label-pr`, it only fills a missing `release:*` label. **A 
 
 ## After merge
 
-Actions auto-merge (user PAT), create `vX.Y.Z` from the label, and optionally dispatch a release workflow. Stacked PRs are promoted automatically.
+Actions auto-merge (user PAT), create `vX.Y.Z` from the label, and optionally dispatch a release workflow. After a merge, open PRs are refreshed onto trunk; stacked PRs are promoted automatically.

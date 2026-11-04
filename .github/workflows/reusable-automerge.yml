@@ -20,6 +20,13 @@ on:
         type: boolean
         required: false
         default: true
+      refresh_open_prs:
+        description: >
+          After any merge into the default branch, update-branch + re-enable
+          auto-merge on every other open PR (needed under strict up-to-date)
+        type: boolean
+        required: false
+        default: true
     secrets:
       AUTO_MERGE_TOKEN:
         required: true
@@ -143,3 +150,38 @@ jobs:
             gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$PR/update-branch" || true
             gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --auto --squash
           done
+
+  # Keep independent (and already-retargeted) PRs mergeable when the default
+  # branch requires "must be up to date". Runs after every merge into trunk.
+  refresh-open-prs:
+    name: Refresh open PRs after trunk moves
+    if: >
+      inputs.refresh_open_prs &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == inputs.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update-branch + re-enable auto-merge on open PRs
+        env:
+          GH_TOKEN: ${{ secrets.AUTO_MERGE_TOKEN }}
+          MERGED_PR: ${{ github.event.pull_request.number }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          ASSIGNEE: ${{ inputs.assignee }}
+        run: |
+          set -euo pipefail
+
+          while IFS=$'\t' read -r n head draft; do
+            [[ "$draft" == "true" ]] && continue
+            [[ "$n" == "$MERGED_PR" ]] && continue
+
+            echo "Refreshing #$n ($head)"
+            # 202 = merge commit queued; 422 = already up to date / conflict / not allowed
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$n/update-branch" || true
+            gh pr edit "$n" --repo "$GITHUB_REPOSITORY" --add-assignee "$ASSIGNEE" || true
+            gh pr merge "$n" --repo "$GITHUB_REPOSITORY" --auto --squash || true
+          done < <(
+            gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$DEFAULT_BRANCH" \
+              --json number,headRefName,isDraft \
+              --jq '.[] | [.number, .headRefName, (.isDraft|tostring)] | @tsv'
+          )
